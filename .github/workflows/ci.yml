@@ -1,11 +1,11 @@
 name: CI
 
 on:
-  push:
-    branches: [main, develop]
-    tags: ["v*"]
   pull_request:
-    branches: [main]
+    types:
+    - labeled
+    branches:
+    - main
 
 env:
   GO_VERSION: "1.25.9"
@@ -13,6 +13,7 @@ env:
 
 jobs:
   lint:
+    if: "${{ github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'build:validate' }}"
     name: Lint
     runs-on: ubuntu-latest
     steps:
@@ -40,6 +41,7 @@ jobs:
         run: go vet ./...
 
   test:
+    if: "${{ github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'build:validate' }}"
     name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
@@ -91,6 +93,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
   security:
+    if: "${{ github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'build:validate' }}"
     name: Security Audit
     runs-on: ubuntu-latest
     steps:
@@ -110,7 +113,8 @@ jobs:
   build:
     name: Build (${{ matrix.goos }}-${{ matrix.goarch }})
     runs-on: ${{ matrix.os }}
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: "${{ github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'build:validate' && (startsWith(github.ref, 'refs/tags/v')) }}"
+
     needs: [lint, test, security]
 
     strategy:
@@ -179,7 +183,8 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: "${{ github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'build:validate' && (startsWith(github.ref, 'refs/tags/v')) }}"
+
     needs: build
     permissions:
       contents: write
