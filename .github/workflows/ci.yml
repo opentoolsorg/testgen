@@ -7,13 +7,14 @@ on:
     branches:
     - main
 
+  workflow_dispatch: {}
 env:
   GO_VERSION: "1.25.9"
   MIN_COVERAGE: "15.0"
 
 jobs:
   lint:
-    if: "${{ github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'build:validate' }}"
+    if: ${{ (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'build:validate') || (github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/tags/v')) }}
     name: Lint
     runs-on: ubuntu-latest
     steps:
@@ -40,8 +41,9 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+    timeout-minutes: 30
   test:
-    if: "${{ github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'build:validate' }}"
+    if: ${{ (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'build:validate') || (github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/tags/v')) }}
     name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
@@ -92,8 +94,9 @@ jobs:
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
 
+    timeout-minutes: 30
   security:
-    if: "${{ github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'build:validate' }}"
+    if: ${{ (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'build:validate') || (github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/tags/v')) }}
     name: Security Audit
     runs-on: ubuntu-latest
     steps:
@@ -110,10 +113,11 @@ jobs:
       - name: Security audit
         run: govulncheck ./...
 
+    timeout-minutes: 30
   build:
     name: Build (${{ matrix.goos }}-${{ matrix.goarch }})
     runs-on: ${{ matrix.os }}
-    if: "${{ github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'build:validate' && (startsWith(github.ref, 'refs/tags/v')) }}"
+    if: ${{ github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/tags/v') }}
 
     needs: [lint, test, security]
 
@@ -180,10 +184,11 @@ jobs:
             ${{ matrix.artifact }}
             ${{ matrix.artifact }}.sha256
 
+    timeout-minutes: 60
   release:
     name: Release
     runs-on: ubuntu-latest
-    if: "${{ github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'build:validate' && (startsWith(github.ref, 'refs/tags/v')) }}"
+    if: ${{ github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/tags/v') }}
 
     needs: build
     permissions:
@@ -211,3 +216,7 @@ jobs:
           generate_release_notes: true
           draft: false
           prerelease: ${{ contains(github.ref, '-') }}
+    timeout-minutes: 60
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event.label.name || github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'build:validate' }}
